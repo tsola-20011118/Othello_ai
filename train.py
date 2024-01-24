@@ -53,7 +53,6 @@ class QLearningOthello:
 		# Q-learningによるエージェントのトレーニング
 		for episode in range(episodes):
 			game = OthelloGame(agent=self)
-
 			while not game.is_game_over():
 				state = np.array(game.board)
 				action = self.choose_action(state)
@@ -71,10 +70,10 @@ class QLearningOthello:
 					final_score = self.evaluate_board(np.array(game.board))
 					reward = final_score - current_score
 					self.update_q_value(next_state, action, reward, next_state)
-
-			# 進捗を送信
-			if progress_pipe:
-				progress_pipe.send(1)
+			# # 進捗を送信
+			# if progress_pipe:
+			# 	progress_pipe.send(1)
+		
 
 	def evaluate_board(self, board):
 		# ゲームボードの評価
@@ -296,7 +295,7 @@ def plot_win_rates(win_rates, win_rate, exploration2, episode2):
 	plt.clf() 
 
 	# 棒グラフの表示
-	plt.bar([str((i + 1) * 10) for i in range(len(win_rates))], win_rates)
+	plt.bar([str((i+1) * 10) for i in range(len(win_rates))], win_rates)
 
 	# グラフのタイトルと軸ラベル
 	plt.xlabel("Battle Number") #対戦回数
@@ -356,6 +355,80 @@ if __name__ == "__main__":
 			pyxel.text(5, 130, f"Your Scores: {q_learning_agent.score}", 0)
 		pyxel.run(update, draw)
 
+		#エージェント同士が戦う
+
+	#発表用
+	elif input('学習回数の実験を行いますか: y or n : ') == "y":
+		episodes1 = 100
+		episodes2 = 10
+		q_learning_agent1 = QLearningOthello(board_size=6)
+		q_learning_agent2 = QLearningOthello(board_size=6)
+
+		progress_pipe1, child_conn1 = Pipe()
+		progress_pipe2, child_conn2 = Pipe()
+
+		training_process1 = Process(target=train_agent, args=(q_learning_agent1, episodes1, child_conn1))
+		training_process2 = Process(target=train_agent, args=(q_learning_agent2, episodes2, child_conn2))
+
+		training_process1.start()
+		training_process2.start()
+
+		with tqdm(total=episodes1, desc="Training Agent 1", position=0, leave=True) as pbar1, \
+				tqdm(total=episodes2, desc="Training Agent 2", position=1, leave=True) as pbar2:
+
+			while training_process1.is_alive() or training_process2.is_alive():
+				if progress_pipe2.poll():
+					pbar2.update(progress_pipe2.recv())
+				if progress_pipe1.poll():
+					pbar1.update(progress_pipe1.recv())
+
+		training_process1.join()
+		training_process2.join()
+		print("Training Done")
+
+		trials = 500 + 1
+		exploration2 = 0.1
+		while True:
+			# 対戦回数ごとに勝率を保存するリスト
+			win_rates = []
+			for j in range(trials):
+				# エージェント同士の対戦
+				game = OthelloGame(agent=q_learning_agent1, human_player=False)
+				game.battle = True
+				game.play_against(q_learning_agent1, q_learning_agent2)
+				if j % 100 == 0 and j != 0 :
+					# 勝率を計算してリストに追加
+					win_rate = q_learning_agent2.score / (q_learning_agent1.score + q_learning_agent2.score)
+					win_rates.append(win_rate)
+					episodes2 += 100
+					# エージェント2の学習
+					training_process2 = Process(target=train_agent, args=(q_learning_agent2, episodes2 - 10, child_conn2))
+					training_process2.daemon = True
+					training_process2.start()
+					training_process2.join()
+					q_learning_agent1.score = 0
+					q_learning_agent2.score = 0
+					print(str(episodes2 - 10))
+			# 勝率の推移をグラフにプロット
+			plot_win_rates(win_rates, win_rate, str(exploration2), str(episodes2))
+			# 対戦結果の表示
+			print(f"Agent 1 Scores: {q_learning_agent1.score}")
+			print(f"Agent 2 Scores: {q_learning_agent2.score}")
+			# 勝率の推移をグラフにプロット
+			plot_win_rates(win_rates, win_rate, str(exploration2), str(episodes2))
+			print("勝率の推移を出力しました")
+			e_change = "n"
+			n_change = "n"
+			e_change = input('エージェントのεを変更しますか: y or n : ')
+			# 学習ε変更
+			if e_change == "y":
+				exploration2 = input('εを幾つにしますか(半角数字で入力): ')
+				while not(0.0 <= float(exploration2) <= 1.0):
+					exploration2 = input('εを幾つにしますか(半角数字で入力)(0~1で入力してください): ')
+				# エージェント2の学習
+				q_learning_agent2 = QLearningOthello(board_size=6, exploration_rate=float(exploration2))
+			n_change = input('エージェントの試行回数を変更しますか: y or n : ')
+	
 	#エージェント同士が戦う
 	else:
 		episodes1 = 10000
@@ -432,4 +505,3 @@ if __name__ == "__main__":
 				print("学習中...")
 				training_process2.join()
 	
-
