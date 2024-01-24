@@ -14,6 +14,7 @@ class QLearningOthello:
 		# Q-tableのサイズを縮小
 		self.q_table_size = 5000  # 適切なサイズに調整
 		self.q_table = np.zeros((self.q_table_size, board_size ** 2))
+		self.score = 0
 
 	def state_to_index(self, state):
 		"""
@@ -87,7 +88,6 @@ class QLearningOthello:
 
 	def play(self, human_player=True):
 		# ゲームの実行（pyxelを使用）
-		pyxel.init(120, 120, fps=10)
 		game = OthelloGame(agent=self, human_player=human_player)
 		game.battle = True
 
@@ -105,8 +105,6 @@ class QLearningOthello:
 			pyxel.rect(pyxel.mouse_x, pyxel.mouse_y, 1, 1, 0)
 
 		pyxel.run(update, draw)
-
-		pyxel.quit()
 
 	def make_move(self, state):
 		return self.choose_action(state)
@@ -193,7 +191,6 @@ class OthelloGame:
 		# 上記条件を満たすマスが存在しない場合、ゲームは終了している
 		return True
 
-
 	def evaluate_board(self, board):
 		# ゲームボードの評価
 		black_score = np.sum(np.array(board) == 1)
@@ -220,7 +217,7 @@ class OthelloGame:
 	def update(self):
 		# ゲームの更新
 		if self.human_player and self.current_player == 1:
-			if pyxel.mouse_x > 0 and pyxel.mouse_x < 120 and pyxel.mouse_y > 0 and pyxel.mouse_y < 120 and pyxel.btnp(pyxel.KEY_SPACE, 1, 1):
+			if pyxel.mouse_x > 0 and pyxel.mouse_x < 120 and pyxel.mouse_y > 0 and pyxel.mouse_y < 120 and pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
 				x, y = pyxel.mouse_x // 20, pyxel.mouse_y // 20
 				if 0 <= x < self.board_size and 0 <= y < self.board_size and self.board[x][y] == 0:
 					self.place_piece(x, y)
@@ -234,15 +231,22 @@ class OthelloGame:
 
 	def draw(self):
 		pyxel.cls(2)
+		total_pieces = 0  # 合計数を保持する変数を初期化
 		for i in range(self.board_size):
 			for j in range(self.board_size):
 				# 自分の手番の場合、駒を置けるますの色を変更
 				if self.human_player and self.current_player == 1 and self.is_valid_move(i, j):
-					pyxel.rect(i * 20, j * 20, 20, 20, 9)  # 9 は別の色に変更可能
-				pyxel.circ(i * 20 + 10, j * 20 + 10, 8, 3)
+					if i * 20 <= pyxel.mouse_x <= (i + 1) * 20 and j * 20 <= pyxel.mouse_y <= (j + 1) * 20:
+						pyxel.rect(i * 20, j * 20, 20, 20, 8)  # マウスが当たっている場合、背景色を変更
+					else:
+						pyxel.rect(i * 20, j * 20, 20, 20, 9)  # 9 は別の色に変更可能
+				pyxel.circ(i * 20 + 10, j * 20 + 10, 8, 3)  # マスの中央に円を描画
 		self.draw_board()
 		if self.is_game_over():
 			self.draw_game_over()
+
+		# 合計数を表示
+		pyxel.text(30, 120, f"YOU  {np.sum(np.array(self.board) == 1)} : {np.sum(np.array(self.board) == 2)}  AI", 0)
 		pyxel.rect(pyxel.mouse_x, pyxel.mouse_y, 1, 1, 0)
 
 	def get_winner(self):
@@ -257,6 +261,12 @@ class OthelloGame:
 		else:
 			return 0
 
+	def reset_game(self):
+		# ゲームの初期化
+		self.board = [[0] * self.board_size for _ in range(self.board_size)]
+		self.initialize_board()
+		self.current_player = 1
+
 def train_agent(agent, episodes, progress_pipe):
     # エージェントのトレーニング
     agent.train(episodes=episodes, progress_pipe=progress_pipe)
@@ -268,11 +278,11 @@ if __name__ == "__main__":
 	progress_pipe, child_conn = Pipe()
 
 	# トレーニング用プロセスを起動
-	training_process = Process(target=train_agent, args=(q_learning_agent, 1000, child_conn))
+	training_process = Process(target=train_agent, args=(q_learning_agent, 11, child_conn))
 	training_process.start()
 
 	# 学習の進捗を表示
-	with tqdm(total=1000, desc="Training", position=0, leave=True) as pbar:
+	with tqdm(total=11, desc="Training", position=0, leave=True) as pbar:
 		while training_process.is_alive():
 			if progress_pipe.poll():
 				pbar.update(progress_pipe.recv())
@@ -281,5 +291,23 @@ if __name__ == "__main__":
 	training_process.join()
 	print("Training Done")
 
-	# 学習したエージェントと対戦
-	q_learning_agent.play(human_player=True)
+
+	# ゲームの初期化
+	pyxel.init(120, 140, fps=10)
+	game = OthelloGame(agent=q_learning_agent, human_player=True)
+	game.battle = True
+
+	def update():
+		if game.is_game_over():
+			if pyxel.btnp(pyxel.KEY_SPACE, 1, 1):
+				if np.sum(np.array(game.board) == 1) >= 18:
+					q_learning_agent.score += 1
+				# ゲームが終了したら初期化
+				game.reset_game()
+		else:
+			game.update()
+
+	def draw():
+		game.draw()
+		pyxel.text(5, 130, f"Your Scores: {q_learning_agent.score}", 0)
+	pyxel.run(update, draw)
