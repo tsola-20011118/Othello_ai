@@ -73,7 +73,7 @@ class QLearningOthello:
 			# # 進捗を送信
 			# if progress_pipe:
 			# 	progress_pipe.send(1)
-		
+
 
 	def evaluate_board(self, board):
 		# ゲームボードの評価
@@ -292,23 +292,35 @@ def train_agent(agent, episodes, progress_pipe):
 	agent.train(episodes=episodes, progress_pipe=progress_pipe)
 
 def plot_win_rates(win_rates, win_rate, exploration2, episode2):
-	plt.clf() 
+	plt.clf()
 
-	# 棒グラフの表示
-	plt.bar([str((i+1) * 10) for i in range(len(win_rates))], win_rates)
+	# 折れ線グラフの表示
+	plt.plot([str((i+1) * 100) for i in range(len(win_rates))], win_rates, marker='o', label='Winning Probability')
+
+	# 各データポイントを点で表示
+	plt.scatter([str((i+1) * 100) for i in range(len(win_rates))], win_rates, color='blue')
 
 	# グラフのタイトルと軸ラベル
-	plt.xlabel("Battle Number") #対戦回数
-	plt.ylabel("Winning Probability") #勝率
-	plt.title("Winning Probability over Battles") # 対戦回数に対する勝率の推移
+	plt.xlabel("Battle Number")  # 対戦回数
+	plt.ylabel("Winning Probability")  # 勝率
+	plt.title("Winning Probability over Battles")  # 対戦回数に対する勝率の推移
+
+	# グラフ上に値を表示
+	for i, win_rate in enumerate(win_rates):
+		plt.text(str((i+1) * 100), win_rate, f"{round(win_rate, 4) * 100}%", fontsize=8, color='black', ha='center', va='bottom')
 
 	# グラフの表示
 	# plt.show()
+
 	# y軸の範囲を0から1に設定
 	plt.ylim(0, 1)
-	plt.text(0, 0.9, "Win rate:" + str(round(win_rate, 4)*100) + "%", fontsize=12, color='red')
+	plt.text(0, 0.9, "Win rate:" + str(round(win_rate, 4) * 100) + "%", fontsize=12, color='red')
 	plt.text(0, 0.85, "Training exploration:" + exploration2, fontsize=12, color='black')
 	plt.text(0, 0.8, "Training episode:" + episode2, fontsize=12, color='black')
+
+	# # 凡例を表示
+	# plt.legend()
+
 	plt.savefig("winning_probability_plot.png")
 
 if __name__ == "__main__":
@@ -386,12 +398,12 @@ if __name__ == "__main__":
 		training_process2.join()
 		print("Training Done")
 
-		trials = 500 + 1
+		trials = 100000
 		exploration2 = 0.1
 		while True:
 			# 対戦回数ごとに勝率を保存するリスト
 			win_rates = []
-			for j in range(trials):
+			for j in range(trials + 1):
 				# エージェント同士の対戦
 				game = OthelloGame(agent=q_learning_agent1, human_player=False)
 				game.battle = True
@@ -415,7 +427,7 @@ if __name__ == "__main__":
 			print(f"Agent 1 Scores: {q_learning_agent1.score}")
 			print(f"Agent 2 Scores: {q_learning_agent2.score}")
 			# 勝率の推移をグラフにプロット
-			plot_win_rates(win_rates, win_rate, str(exploration2), str(episodes2))
+			plot_win_rates(win_rates, win_rate, str(exploration2), str(episodes2 - 10))
 			print("勝率の推移を出力しました")
 			e_change = "n"
 			n_change = "n"
